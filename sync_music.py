@@ -1,49 +1,97 @@
 import album_art_fix
 import sysrsync
 import typer
+from enum import Enum
 
 
-def sync_music(source_directory: str, target_directory: str) -> None:
+class SyncMode(str, Enum):
     """
-    Syncs a music library quickly by comparing file sizes, protecting generated
-    cover art, and then fixes album art in the target directory.
+    Enum to define the synchronization mode.
 
-    This script uses rsync with the --size-only flag for speed. It avoids the
-    slow --checksum scan and relies on file size changes to detect differences.
-    This prevents re-syncing files that have only had their metadata (like
-    album art) updated on the target, as rsync will not overwrite a newer file
-    with an older one by default.
+    - 'dap': Digital Audio Player mode. Syncs only audio files and fixes album art.
+    - 'nas': Network Attached Storage mode. Performs a full, unfiltered sync.
     """
-    print("Performing fast sync by comparing file sizes...")
 
-    # rsync filter rules:
-    # 1. 'P cover.jpg': Protect 'cover.jpg'. Any file matching this is exempt from deletion.
-    # 2. '- .DS_Store': Exclude '.DS_Store'. Any file matching this is not copied.
-    filter_rules = [
-        "P cover.jpg",
-        "- .DS_Store",
-    ]
+    dap = "dap"
+    nas = "nas"
 
+
+def sync_music(
+    source_directory: str,
+    target_directory: str,
+    mode: SyncMode = typer.Argument(
+        ...,
+        help="Sync mode: 'dap' for filtered audio sync to a DAP, or 'nas' for a full unfiltered copy to a NAS.",
+    ),
+) -> None:
+    """
+    Syncs a music library with options for a full unfiltered copy or a filtered copy for a DAP.
+
+    - `dap` mode: Syncs only specific audio files based on modification time and size,
+      protects generated cover art, cleans up macOS metadata, and fixes album art.
+    - `nas` mode: Performs a direct, unfiltered sync of the entire directory,
+      ensuring an exact copy on the destination.
+    """
     rsync_options = [
         # Core options
-        # -r: recursive, -t: preserve times
-        # -vv: verbose, -h: human-readable, -P: --partial --progress
-        "-rtvvhP",
-        "--size-only",          # Base comparison on size only for speed
-        "--delete",
-        "--delete-excluded",
-        "--inplace",
+        # -r: recursive, -t: preserve times, -v: verbose, -h: human-readable
+        # -P: --partial --progress
+        # -m: --prune-empty-dirs
+        "-rtvhPm",
+        # Sync based on mod-time & size (much faster than checksum).
+        # --modify-window=2 helps with FAT/exFAT filesystem timestamp resolution.
         "--modify-window=2",
+        "--delete",
+        "--inplace",
         # Permissions
         "--no-g",
         "--no-o",
         "--no-p",
     ]
 
-    # Add filter rules to the options
-    for rule in filter_rules:
-        rsync_options.append(f"--filter={rule}")
+    if mode == SyncMode.dap:
+        print(
+            "Running in DAP mode: Syncing audio files and fixing album art (this may take a moment)..."
+        )
+        rsync_options.append("--delete-excluded")
 
+        # Define which audio file extensions to include in the sync
+        base_audio_extensions = [".mp3", ".m4a", ".flac", ".aac", ".ogg", ".wav"]
+        # Create a case-insensitive list of extensions
+        audio_extensions = []
+        for ext in base_audio_extensions:
+            audio_extensions.append(ext.lower())
+            audio_extensions.append(ext.upper())
+
+        # rsync filter rules for DAP mode:
+        # 1. 'P cover.jpg': Protect 'cover.jpg' from deletion on the destination.
+        # 2. '- .DS_Store', '- ._*': Exclude macOS metadata files.
+        # 3. '+ */': IMPORTANT - Include all directories for traversal.
+        # 4. '+ *.ext': Include specified audio files.
+        # 5. '- *': Exclude all other files.
+        filter_rules = [
+            "P cover.jpg",
+            "- .DS_Store",
+            "- ._*",
+            "+ */",  # Must come before the file include rules
+        ]
+        for ext in audio_extensions:
+            filter_rules.append(f"+ *{ext}")
+        filter_rules.append("- *")
+
+        for rule in filter_rules:
+            rsync_options.append(f"--filter={rule}")
+        
+        print(f"Syncing audio files (case-insensitive): {', '.join(base_audio_extensions)}")
+
+    elif mode == SyncMode.nas:
+        print("Running in NAS mode: Performing a full, unfiltered sync...")
+        # For a NAS, checksumming can be more reliable if modification times
+        # are not trusted across different systems.
+        rsync_options.append("-c")
+
+
+    # Run the sync operation
     sysrsync.run(
         source=source_directory,
         destination=target_directory,
@@ -51,11 +99,11 @@ def sync_music(source_directory: str, target_directory: str) -> None:
         options=rsync_options,
     )
 
-    print("\nFixing album art in the target directory...")
-    # Call album_art_fix.main with a string path, not a list.
-    album_art_fix.main(target_directory)
+    if mode == SyncMode.dap:
+        print("\nFixing album art in the target directory...")
+        album_art_fix.main(target_directory)
 
-    print("\nMusic sync and album art fix complete.")
+    print(f"\nMusic sync in '{mode.value}' mode complete.")
 
 
 if __name__ == "__main__":
