@@ -1,74 +1,141 @@
 # Rockbox Scripts
 
-A collection of Python scripts for managing and updating Rockbox firmware on Rockbox devices, along with tools for organizing music files.
+A collection of Python scripts for managing and updating Rockbox firmware on Rockbox devices, along with tools for organizing, syncing, and exporting music and playlists.
+
+---
+
+## Table of Contents
+
+- [Rockbox Scripts](#rockbox-scripts)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Scripts](#scripts)
+    - [`app.py`](#apppy)
+    - [`album_art_fix.py`](#album_art_fixpy)
+    - [`mac_playlist_export.py`](#mac_playlist_exportpy)
+    - [`sync_music.py`](#sync_musicpy)
+    - [`update_rockbox.py`](#update_rockboxpy)
+  - [Getting Started](#getting-started)
+  - [Dependencies](#dependencies)
+  - [Acknowledgments](#acknowledgments)
+
+---
+
+## Overview
+
+This repository provides a suite of utilities to make life easier for Rockbox device users. Automate music synchronization, fix album artwork, export playlists from macOS Music, and keep your Rockbox firmware up to date—all with simple Python scripts.
+
+---
 
 ## Scripts
 
 ### `app.py`
 
-This script serves as a unified entry point to perform multiple tasks related to Rockbox devices, music synchronization, and playlist management.
+Unified entry point to perform multiple Rockbox-related tasks: music sync, playlist export, device updates, and more.
 
-#### Usage
-
+**Usage:**
 ```bash
 python app.py --playlists-directory-name "Playlists" --music-directory-name "Music" /path/to/rockbox_mount /path/to/music
 ```
+**Parameters:**
+- `mount_point`: Mount point of the Rockbox device.
+- `source_music_directory`: Directory containing music files to synchronize.
+- `playlists_directory_name` (optional): Directory to export playlists (default: "Playlists").
+- `music_directory_name` (optional): Directory on device for music sync (default: "Music").
 
-#### Parameters
-
-- mount_point: The mount point of the Rockbox device.
-- source_music_directory: The source directory containing the music files to be synchronized.
-- playlists_directory_name (optional): The name of the directory where playlists will be exported (default is "Playlists").
-- music_directory_name (optional): The name of the directory on the Rockbox device where music will be synchronized (default is "Music").
+---
 
 ### `album_art_fix.py`
 
-This script organizes music files, extracts cover images from audio files, and processes the cover images to ensure a consistent format. It is designed to enhance the organization of a music collection.
+Organizes music files and extracts/normalizes cover images (album art) from audio files for consistent format and device compatibility.
 
-#### Usage
-
+**Usage:**
 ```bash
 python album_art_fix.py /path/to/music_directory
 ```
 
+---
+
 ### `mac_playlist_export.py`
 
-This script organizes exports all the user playlists in the macOS Music app to the specified directory as m3u.
+Exports all user playlists from the macOS Music app to a specified directory as `.m3u` files.
 
-#### Usage
-
+**Usage:**
 ```bash
 python mac_playlist_export.py /path/to/store_playlists
 ```
 
+---
+
 ### `sync_music.py`
 
-This script synchronizes music between a source and target directory. It uses `rsync` for efficient file transfer and incorporates the functionality of `album_art_fix.py` to fix album art before syncing.
+Synchronizes music between a source and a target directory using `rsync`. Supports two modes:
 
-#### Usage
+- `dap`: Syncs only audio files (filters by extension), preserves album art, and cleans up metadata.
+- `nas`: Performs a full, unfiltered sync for backup to a NAS.
 
+Also integrates album art fixing after sync.
+
+**Usage:**
 ```bash
-python sync_music.py /path/to/source_directory /path/to/target_directory
+python sync_music.py /path/to/source_directory /path/to/target_directory --mode dap
 ```
+or
+```bash
+python sync_music.py /path/to/source_directory /path/to/target_directory --mode nas
+```
+
+---
 
 ### `update_rockbox.py`
 
-This script updates the Rockbox firmware on any Rockbox supported device, it autodetects the current device and updates it accordingly. It checks for the latest Rockbox SVN revision, compares it with the current revision, and updates the firmware if necessary.
+Updates the Rockbox firmware on your device. Auto-detects the current device and revision, downloads, and installs the latest daily build if needed.
 
-#### Usage
-
+**Usage:**
 ```bash
 python update_rockbox.py /path/to/rockbox_mount_point
 ```
 
+---
+
 ## Getting Started
 
-1. Clone the repository.
-1. Install the dependencies:
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/YOUR_USERNAME/rockbox_scripts.git
+   cd rockbox_scripts
+   ```
+
+2. **Install dependencies**
+   ```bash
+   pip install -U -r requirements.txt
+   ```
+
+3. **Run the scripts as shown in the [Scripts](#scripts) section.**
+
+---
+
+## Dependencies
+
+- Python 3.8+
+- [typer](https://typer.tiangolo.com/)
+- [mutagen](https://mutagen.readthedocs.io/)
+- [Pillow (PIL)](https://pillow.readthedocs.io/)
+- [sysrsync](https://pypi.org/project/sysrsync/)
+- [beautifulsoup4](https://www.crummy.com/software/BeautifulSoup/)
+- [requests](https://requests.readthedocs.io/)
+
+Install all dependencies using:
 ```bash
 pip install -U -r requirements.txt
 ```
 
+---
+
 ## Acknowledgments
 
 - [@SupItsZaire](https://github.com/SupItsZaire) for their [Rockbox Cover Art Fixer](https://github.com/SupItsZaire/rockbox-cover-art-fixer) script
+
+---
+
+Happy Rockboxing!

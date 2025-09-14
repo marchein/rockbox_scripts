@@ -1,51 +1,139 @@
 import album_art_fix
-import tempfile
+import os
+import shutil
+import subprocess
 import sysrsync
+import typer
+from enum import Enum
 
 
-def sync_music(source_directory: str, target_directory: str) -> None:
-    # Fix the album art before syncing, I plan using this
-    # with an iTunes library folder, and I don't want to
-    # touch the source directory
-    with tempfile.TemporaryDirectory() as tmpdir:
-        print("Copying files to temporary directory using rsync...")
-        sysrsync.run(
-            source=source_directory,
-            destination=tmpdir,
-            sync_source_contents=True,
-            options=[
-                "-ahS",
-                "--delete",
-                "--inplace",
-                "--no-compress",
-                "--no-p",
-                "--no-g",
-                "--no-o",
-            ],
+class SyncMode(str, Enum):
+    """
+    Enum to define the synchronization mode.
+
+    - 'dap': Digital Audio Player mode. Syncs only audio files and fixes album art.
+    - 'nas': Network Attached Storage mode. Performs a full, unfiltered sync.
+    """
+
+    dap = "dap"
+    nas = "nas"
+
+
+def cleanup_empty_album_art_folders(directory: str) -> None:
+    """
+    Recursively finds and deletes folders that only contain 'cover.jpg'.
+
+    This function walks the directory from the bottom up. For each directory,
+    it checks if it's empty or contains only a 'cover.jpg' file.
+    """
+    print("\nCleaning up empty folders with only album art...")
+    deleted_folders_count = 0
+    # Walk the directory tree from the bottom up
+    for root, dirs, files in os.walk(directory, topdown=False):
+        # Check if the directory contains only 'cover.jpg' (case-insensitive) and no subdirectories
+        if not dirs and len(files) == 1 and files[0].lower() == "cover.jpg":
+            try:
+                print(f"Removing folder '{root}' which only contains album art.")
+                shutil.rmtree(root)
+                deleted_folders_count += 1
+            except OSError as e:
+                print(f"Error removing directory {root}: {e}")
+
+    if deleted_folders_count > 0:
+        print(f"Successfully cleaned up {deleted_folders_count} folder(s).")
+    else:
+        print("No empty album art folders found to clean up.")
+
+
+def sync_music(
+    source_directory: str,
+    target_directory: str,
+    mode: SyncMode = typer.Argument(
+        ...,
+        help="Sync mode: 'dap' for filtered audio sync to a DAP, or 'nas' for a full unfiltered copy to a NAS.",
+    ),
+) -> None:
+    """
+    Syncs a music library with options for a full unfiltered copy or a filtered copy for a DAP.
+
+    - `dap` mode: Syncs only specific audio files based on modification time and size,
+      protects generated cover art, cleans up macOS metadata, and fixes album art.
+    - `nas` mode: Performs a direct, unfiltered sync of the entire directory,
+      ensuring an exact copy on the destination.
+    """
+    rsync_options = [
+        # Core options
+        # -r: recursive, -t: preserve times, -v: verbose, -h: human-readable
+        # -P: --partial --progress
+        # -m: --prune-empty-dirs
+        "-rtvhPm",
+        # Sync based on mod-time & size (much faster than checksum).
+        # --modify-window=2 helps with FAT/exFAT filesystem timestamp resolution.
+        "--modify-window=2",
+        "--delete",
+        "--inplace",
+        # Permissions
+        "--no-g",
+        "--no-o",
+        "--no-p",
+    ]
+
+    if mode == SyncMode.dap:
+        print(
+            "Running in DAP mode: Syncing audio files and fixing album art (this may take a moment)..."
+        )
+        rsync_options.append("--delete-excluded")
+
+        # Define which audio file extensions to include in the sync
+        base_audio_extensions = [".mp3", ".m4a", ".flac", ".aac", ".ogg", ".wav"]
+        # Create a case-insensitive list of extensions
+        audio_extensions = [ext for base_ext in base_audio_extensions for ext in [base_ext.lower(), base_ext.upper()]]
+
+        # rsync filter rules for DAP mode:
+        # 1. 'P cover.jpg': Protect 'cover.jpg' from deletion on the destination.
+        # 2. '- .DS_Store', '- ._*': Exclude macOS metadata files.
+        # 3. '+ */': IMPORTANT - Include all directories for traversal.
+        # 4. '+ *.ext': Include specified audio files.
+        # 5. '- *': Exclude all other files.
+        filter_rules = [
+            "P cover.jpg",
+            "- .DS_Store",
+            "- ._*",
+            "+ */",  # Must come before the file include rules
+        ]
+        for ext in audio_extensions:
+            filter_rules.append(f"+ *{ext}")
+        filter_rules.append("- *")
+
+        for rule in filter_rules:
+            rsync_options.append(f"--filter={rule}")
+
+        print(
+            f"Syncing audio files (case-insensitive): {', '.join(base_audio_extensions)}"
         )
 
-        print("Extracting covers...")
-        album_art_fix.main(tmpdir)
+    elif mode == SyncMode.nas:
+        print("Running in NAS mode: Performing a full, unfiltered sync...")
+        # Exclude macOS metadata files.
+        rsync_options.extend(["--exclude=.DS_Store", "--exclude=._*"])
 
-        print("Copying files to target directory...")
-        sysrsync.run(
-            source=tmpdir,
-            destination=target_directory,
-            sync_source_contents=True,
-            options=[
-                "-avhPS",
-                "--delete",
-                "--inplace",
-                "--no-compress",
-                "--modify-window=2",
-                "--no-p",
-                "--no-g",
-                "--no-o",
-            ],
-        )
+    # Run the sync operation
+    sysrsync.run(
+        source=source_directory,
+        destination=target_directory,
+        sync_source_contents=True,
+        options=rsync_options,
+    )
+
+    # Clean up folders that only contain album art after the sync
+    cleanup_empty_album_art_folders(target_directory)
+
+    if mode == SyncMode.dap:
+        print("\nFixing album art in the target directory...")
+        album_art_fix.main(target_directory)
+
+    print(f"\nMusic sync in '{mode.value}' mode complete.")
 
 
 if __name__ == "__main__":
-    import typer
-
     typer.run(sync_music)
