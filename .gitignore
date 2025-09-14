@@ -39,3 +39,6 @@ venv.bak/
 
 # Playlist files
 *.m3u
+
+# Bash Scripts
+*.sh

@@ -15,8 +15,6 @@ IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png")
 COVER_FILENAME = "cover.jpg"
 TEMP_FOLDER_NAME = "cover_extraction_temp"
 
-# ... (all other functions remain the same) ...
-
 def extract_art_mutagen(file_path: str) -> str | None:
     try:
         file_obj = File(file_path, easy=False)

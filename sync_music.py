@@ -1,4 +1,7 @@
 import album_art_fix
+import os
+import shutil
+import subprocess
 import sysrsync
 import typer
 from enum import Enum
@@ -14,6 +17,32 @@ class SyncMode(str, Enum):
 
     dap = "dap"
     nas = "nas"
+
+
+def cleanup_empty_album_art_folders(directory: str) -> None:
+    """
+    Recursively finds and deletes folders that only contain 'cover.jpg'.
+
+    This function walks the directory from the bottom up. For each directory,
+    it checks if it's empty or contains only a 'cover.jpg' file.
+    """
+    print("\nCleaning up empty folders with only album art...")
+    deleted_folders_count = 0
+    # Walk the directory tree from the bottom up
+    for root, dirs, files in os.walk(directory, topdown=False):
+        # Check if the directory contains only 'cover.jpg' (case-insensitive) and no subdirectories
+        if not dirs and len(files) == 1 and files[0].lower() == "cover.jpg":
+            try:
+                print(f"Removing folder '{root}' which only contains album art.")
+                shutil.rmtree(root)
+                deleted_folders_count += 1
+            except OSError as e:
+                print(f"Error removing directory {root}: {e}")
+
+    if deleted_folders_count > 0:
+        print(f"Successfully cleaned up {deleted_folders_count} folder(s).")
+    else:
+        print("No empty album art folders found to clean up.")
 
 
 def sync_music(
@@ -81,15 +110,15 @@ def sync_music(
 
         for rule in filter_rules:
             rsync_options.append(f"--filter={rule}")
-        
-        print(f"Syncing audio files (case-insensitive): {', '.join(base_audio_extensions)}")
+
+        print(
+            f"Syncing audio files (case-insensitive): {', '.join(base_audio_extensions)}"
+        )
 
     elif mode == SyncMode.nas:
         print("Running in NAS mode: Performing a full, unfiltered sync...")
-        # For a NAS, checksumming can be more reliable if modification times
-        # are not trusted across different systems.
-        rsync_options.append("-c")
-
+        # Exclude macOS metadata files.
+        rsync_options.extend(["--exclude=.DS_Store", "--exclude=._*"])
 
     # Run the sync operation
     sysrsync.run(
@@ -98,6 +127,9 @@ def sync_music(
         sync_source_contents=True,
         options=rsync_options,
     )
+
+    # Clean up folders that only contain album art after the sync
+    cleanup_empty_album_art_folders(target_directory)
 
     if mode == SyncMode.dap:
         print("\nFixing album art in the target directory...")
