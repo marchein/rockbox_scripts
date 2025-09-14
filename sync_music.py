@@ -87,10 +87,7 @@ def sync_music(
         # Define which audio file extensions to include in the sync
         base_audio_extensions = [".mp3", ".m4a", ".flac", ".aac", ".ogg", ".wav"]
         # Create a case-insensitive list of extensions
-        audio_extensions = []
-        for ext in base_audio_extensions:
-            audio_extensions.append(ext.lower())
-            audio_extensions.append(ext.upper())
+        audio_extensions = [ext for base_ext in base_audio_extensions for ext in [base_ext.lower(), base_ext.upper()]]
 
         # rsync filter rules for DAP mode:
         # 1. 'P cover.jpg': Protect 'cover.jpg' from deletion on the destination.
